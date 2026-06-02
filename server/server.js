@@ -4,7 +4,24 @@
  * Also serves the React frontend in production
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '.env'), override: true });
+
+// Also force-apply GEMINI_API_KEY from the file in case the parent process has it set
+try {
+  const fs = require('fs');
+  const p = require('path').join(__dirname, '.env');
+  const raw = fs.readFileSync(p, 'utf8');
+  const m = raw.match(/^GEMINI_API_KEY=(.*)$/m);
+  if (m && m[1]) {
+    const val = m[1].trim().replace(/^"|"$/g, '');
+    // log masked file value for debugging
+    const maskedFile = val.length > 8 ? `${val.slice(0,4)}...${val.slice(-4)}` : '****';
+    console.log(`GEMINI_API_KEY from file: ${maskedFile}`);
+    process.env.GEMINI_API_KEY = val;
+  }
+} catch (e) {
+  // ignore
+}
 
 const express = require('express');
 const cors = require('cors');
@@ -15,6 +32,15 @@ const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Log masked GEMINI key so we can confirm which key is being used at runtime
+const rawGeminiKey = process.env.GEMINI_API_KEY || '';
+if (rawGeminiKey) {
+  const masked = rawGeminiKey.length > 8 ? `${rawGeminiKey.slice(0,4)}...${rawGeminiKey.slice(-4)}` : '****';
+  console.log(`Using GEMINI_API_KEY: ${masked}`);
+} else {
+  console.log('No GEMINI_API_KEY found in environment');
+}
 
 // Middleware
 app.use(cors({
