@@ -26,6 +26,13 @@ try {
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+// Undici Agent for IPv4 fallback
+let UndiciAgent;
+try {
+  UndiciAgent = require('undici').Agent;
+} catch (e) {
+  UndiciAgent = null;
+}
 
 // Import auth routes
 const authRoutes = require('./routes/auth');
@@ -466,8 +473,26 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
       })
     };
 
-    const response = await fetch(url, options);
-    const data = await response.json();
+    // Try primary fetch
+    let response;
+    let data;
+    try {
+      response = await fetch(url, options);
+      data = await response.json();
+    } catch (err) {
+      // If connect timeout, retry forcing IPv4 if available
+      const code = err && err.cause && err.cause.code;
+      console.warn('Primary fetch failed:', code || err.message);
+      if (code === 'UND_ERR_CONNECT_TIMEOUT' && UndiciAgent) {
+        console.log('Connect timeout detected — retrying with IPv4-only Agent');
+        const agent = new UndiciAgent({ connect: { family: 4 } });
+        const retryOptions = Object.assign({}, options, { dispatcher: agent });
+        response = await fetch(url, retryOptions);
+        data = await response.json();
+      } else {
+        throw err;
+      }
+    }
 
     console.log('Gemini provider Status:', response.status);
     console.log('Gemini provider Response:', JSON.stringify(data, null, 2));
