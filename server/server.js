@@ -450,16 +450,13 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
       parts.push({ text: prompt });
     }
 
-    // Call Google Gemini API
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    // Call Google Gemini API (debug mode) - parse and log raw provider response
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const options = {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{
-          parts: parts
-        }],
+        contents: [{ parts: parts }],
         generationConfig: {
           temperature: 0.7,
           topK: 40,
@@ -467,49 +464,16 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
           maxOutputTokens: 8192,
         }
       })
-    });
+    };
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
-      
-      if (response.status === 400) {
-        return res.status(500).json({ error: 'Invalid request to Gemini API. Check your API key.' });
-      } else if (response.status === 403) {
-        return res.status(500).json({ error: 'Gemini API key is invalid or disabled.' });
-      } else if (response.status === 429) {
-        return res.status(429).json({ error: 'Rate limit exceeded, please try again later.' });
-      }
-      
-      return res.status(500).json({ error: 'AI processing failed. Check server logs.' });
-    }
-
+    const response = await fetch(url, options);
     const data = await response.json();
-    
-    // Extract text from Gemini response
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!textContent) {
-      console.error('No content in Gemini response:', JSON.stringify(data));
-      return res.status(500).json({ error: 'No response from AI' });
-    }
 
-    // Parse JSON from the response (handle markdown code blocks)
-    let jsonStr = textContent.trim();
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.slice(7);
-    } else if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith('```')) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
-    jsonStr = jsonStr.trim();
+    console.log('Gemini provider Status:', response.status);
+    console.log('Gemini provider Response:', JSON.stringify(data, null, 2));
 
-    const result = JSON.parse(jsonStr);
-    
-    console.log(`✅ Generated ${type} successfully using Google Gemini`);
-    res.json(result);
+    // Return the raw provider response for debugging (temporary)
+    return res.status(response.status >= 200 && response.status < 300 ? 200 : response.status).json(data);
     
   } catch (error) {
     console.error('Error generating notes:', error);
