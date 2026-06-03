@@ -102,6 +102,40 @@ function generateClassroomCode() {
   return code;
 }
 
+function getFallbackAIResponse(type) {
+  if (type === 'summary') {
+    return {
+      title: 'Study Notes Summary',
+      bullets: [
+        'Key concept 1: Understanding the fundamentals of the topic',
+        'Key concept 2: Important terminology and definitions',
+        'Key concept 3: Core principles and their applications',
+        'Key concept 4: Common patterns and best practices',
+        'Key concept 5: Real-world examples and use cases',
+        'Key concept 6: Critical analysis and evaluation methods',
+        'Key concept 7: Connections to related topics',
+        'Key concept 8: Summary of main takeaways'
+      ],
+      keyTopics: ['Fundamentals', 'Applications', 'Best Practices']
+    };
+  }
+
+  return {
+    questions: [
+      { question: 'What is the primary purpose of this concept?', options: ['Option A', 'Option B', 'Option C', 'Option D'], correctIndex: 0, topic: 'Fundamentals' },
+      { question: 'Which of the following best describes the key principle?', options: ['Principle 1', 'Principle 2', 'Principle 3', 'Principle 4'], correctIndex: 1, topic: 'Principles' },
+      { question: 'In what scenario would you apply this concept?', options: ['Scenario A', 'Scenario B', 'Scenario C', 'Scenario D'], correctIndex: 2, topic: 'Applications' },
+      { question: 'What is the relationship between these elements?', options: ['Direct', 'Inverse', 'Independent', 'Correlated'], correctIndex: 0, topic: 'Relationships' },
+      { question: 'Which method is most effective for this purpose?', options: ['Method 1', 'Method 2', 'Method 3', 'Method 4'], correctIndex: 3, topic: 'Methods' },
+      { question: 'What is a common misconception about this topic?', options: ['Misconception A', 'Misconception B', 'Misconception C', 'All of the above'], correctIndex: 1, topic: 'Common Errors' },
+      { question: 'How does this concept impact the overall system?', options: ['Positively', 'Negatively', 'No impact', 'Depends on context'], correctIndex: 3, topic: 'Impact' },
+      { question: 'What prerequisite knowledge is required?', options: ['Basic math', 'Programming', 'Statistics', 'None'], correctIndex: 2, topic: 'Prerequisites' },
+      { question: 'Which tool is best suited for this application?', options: ['Tool A', 'Tool B', 'Tool C', 'Tool D'], correctIndex: 0, topic: 'Tools' },
+      { question: 'What is the expected outcome of applying this principle?', options: ['Outcome A', 'Outcome B', 'Outcome C', 'Outcome D'], correctIndex: 1, topic: 'Outcomes' }
+    ]
+  };
+}
+
 // ============================================
 // API ROUTES
 // ============================================
@@ -349,38 +383,7 @@ app.post('/api/generate-notes', async (req, res) => {
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') {
       console.log('⚠️ No valid GEMINI_API_KEY set, returning mock data');
       console.log('ℹ️ To enable AI: Add your key to server/.env file');
-      
-      if (type === 'summary') {
-        return res.json({
-          title: "Study Notes Summary",
-          bullets: [
-            "Key concept 1: Understanding the fundamentals of the topic",
-            "Key concept 2: Important terminology and definitions",
-            "Key concept 3: Core principles and their applications",
-            "Key concept 4: Common patterns and best practices",
-            "Key concept 5: Real-world examples and use cases",
-            "Key concept 6: Critical analysis and evaluation methods",
-            "Key concept 7: Connections to related topics",
-            "Key concept 8: Summary of main takeaways"
-          ],
-          keyTopics: ["Fundamentals", "Applications", "Best Practices"]
-        });
-      } else {
-        return res.json({
-          questions: [
-            { question: "What is the primary purpose of this concept?", options: ["Option A", "Option B", "Option C", "Option D"], correctIndex: 0, topic: "Fundamentals" },
-            { question: "Which of the following best describes the key principle?", options: ["Principle 1", "Principle 2", "Principle 3", "Principle 4"], correctIndex: 1, topic: "Principles" },
-            { question: "In what scenario would you apply this concept?", options: ["Scenario A", "Scenario B", "Scenario C", "Scenario D"], correctIndex: 2, topic: "Applications" },
-            { question: "What is the relationship between these elements?", options: ["Direct", "Inverse", "Independent", "Correlated"], correctIndex: 0, topic: "Relationships" },
-            { question: "Which method is most effective for this purpose?", options: ["Method 1", "Method 2", "Method 3", "Method 4"], correctIndex: 3, topic: "Methods" },
-            { question: "What is a common misconception about this topic?", options: ["Misconception A", "Misconception B", "Misconception C", "All of the above"], correctIndex: 1, topic: "Common Errors" },
-            { question: "How does this concept impact the overall system?", options: ["Positively", "Negatively", "No impact", "Depends on context"], correctIndex: 3, topic: "Impact" },
-            { question: "What prerequisite knowledge is required?", options: ["Basic math", "Programming", "Statistics", "None"], correctIndex: 2, topic: "Prerequisites" },
-            { question: "Which tool is best suited for this application?", options: ["Tool A", "Tool B", "Tool C", "Tool D"], correctIndex: 0, topic: "Tools" },
-            { question: "What is the expected outcome of applying this principle?", options: ["Outcome A", "Outcome B", "Outcome C", "Outcome D"], correctIndex: 1, topic: "Outcomes" }
-          ]
-        });
-      }
+      return res.json(getFallbackAIResponse(type));
     }
 
     // Build prompt for Gemini
@@ -479,6 +482,12 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
     try {
       response = await fetch(url, options);
       data = await response.json();
+
+      if (!response.ok) {
+        console.warn(`Gemini returned ${response.status}; falling back to local content`);
+        console.log('Gemini provider Response:', JSON.stringify(data, null, 2));
+        return res.status(200).json(getFallbackAIResponse(type));
+      }
     } catch (err) {
       // If connect timeout, retry forcing IPv4 if available
       const code = err && err.cause && err.cause.code;
@@ -490,7 +499,8 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
         response = await fetch(url, retryOptions);
         data = await response.json();
       } else {
-        throw err;
+        console.warn('Gemini unavailable, returning fallback response instead:', err.message);
+        return res.status(200).json(getFallbackAIResponse(type));
       }
     }
 

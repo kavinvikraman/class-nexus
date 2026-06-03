@@ -5,13 +5,42 @@
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
 
 // JWT Secret - In production, use environment variable
 const JWT_SECRET = process.env.JWT_SECRET || 'classnexus-super-secret-key-2024';
 const JWT_EXPIRES_IN = '7d';
 
-// In-memory user storage (replace with database in production)
-const users = [];
+// Persist users to disk so logins survive server restarts
+const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
+
+function loadUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) {
+      return [];
+    }
+
+    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('Could not load persisted users, starting empty:', error.message);
+    return [];
+  }
+}
+
+function saveUsers(users) {
+  try {
+    fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (error) {
+    console.warn('Could not persist users:', error.message);
+  }
+}
+
+// In-memory cache backed by a JSON file
+const users = loadUsers();
 
 /**
  * Generate JWT token for authenticated user
@@ -97,6 +126,7 @@ const signup = async (req, res) => {
 
     // Save user
     users.push(newUser);
+    saveUsers(users);
 
     // Generate token
     const token = generateToken(newUser);
