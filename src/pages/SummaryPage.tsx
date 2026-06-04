@@ -53,6 +53,9 @@ const SummaryPage = () => {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to generate quiz');
+      if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
+        throw new Error("No quiz questions could be generated. Please make sure your notes have enough text content.");
+      }
       sessionStorage.setItem("classnexus_quiz", JSON.stringify(data));
       navigate("/quiz");
     } catch (e: any) {

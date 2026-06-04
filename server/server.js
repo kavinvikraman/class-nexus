@@ -34,6 +34,14 @@ try {
   UndiciAgent = null;
 }
 
+// Optional PDF parsing for uploaded PDFs
+let pdfParse;
+try {
+  pdfParse = require('pdf-parse');
+} catch (e) {
+  pdfParse = null;
+}
+
 // Import auth routes
 const authRoutes = require('./routes/auth');
 
@@ -133,6 +141,60 @@ function getFallbackAIResponse(type) {
       { question: 'Which tool is best suited for this application?', options: ['Tool A', 'Tool B', 'Tool C', 'Tool D'], correctIndex: 0, topic: 'Tools' },
       { question: 'What is the expected outcome of applying this principle?', options: ['Outcome A', 'Outcome B', 'Outcome C', 'Outcome D'], correctIndex: 1, topic: 'Outcomes' }
     ]
+  };
+}
+
+// Simple local extractive summarizer (works offline when Gemini is unavailable)
+function summarizeText(text, bulletsCount = 8) {
+  if (!text || typeof text !== 'string') {
+    return { title: 'Summary', bullets: [], keyTopics: [] };
+  }
+
+  // Split into sentences
+  const sentences = text
+    .replace(/\n+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // Tokenize and compute word frequencies
+  const stopwords = new Set(['the','and','is','in','to','of','a','an','for','on','with','that','this','these','those','are','as','by','from','or','be','which','it','at','we','can','has','have']);
+  const freq = Object.create(null);
+  const tokens = [];
+  for (const s of sentences) {
+    const words = s.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').split(/\s+/).filter(Boolean);
+    for (const w of words) {
+      if (w.length <= 2 || stopwords.has(w)) continue;
+      freq[w] = (freq[w] || 0) + 1;
+      tokens.push(w);
+    }
+  }
+
+  // Score sentences by sum of token frequencies
+  const scored = sentences.map((s, i) => {
+    const words = s.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').split(/\s+/).filter(Boolean);
+    let score = 0;
+    for (const w of words) {
+      if (freq[w]) score += freq[w];
+    }
+    return { i, sentence: s, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+
+  // Pick top sentences for bullets, preserve original order
+  const top = scored.slice(0, Math.min(bulletsCount, scored.length)).sort((a, b) => a.i - b.i).map(s => s.sentence);
+
+  // Key topics: top frequent tokens
+  const topics = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 5);
+
+  // Title: first non-empty line or first 6 words
+  const title = (text.split('\n').find(l => l.trim()) || sentences[0] || '').split(' ').slice(0, 6).join(' ').replace(/[.?!]$/,'') || 'Study Summary';
+
+  return {
+    title: title.length > 60 ? title.slice(0, 57) + '...' : title,
+    bullets: top.map(s => s.length > 200 ? s.slice(0,197) + '...' : s),
+    keyTopics: topics
   };
 }
 
@@ -361,13 +423,129 @@ app.get('/health', (req, res) => {
 // ============================================
 
 /**
+ * Generate quiz questions locally from text (offline mode)
+ * Uses simple NLP to extract key concepts and create questions
+ */
+function generateQuizFromText(text, questionsCount = 10) {
+  if (!text || typeof text !== 'string') {
+    return { questions: [] };
+  }
+
+  // Split into sentences
+  const sentences = text
+    .replace(/\n+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20);
+
+  if (sentences.length < 3) {
+    return { questions: [] };
+  }
+
+  // Extract key phrases and concepts
+  const stopwords = new Set(['the','and','is','in','to','of','a','an','for','on','with','that','this','these','those','are','as','by','from','or','be','which','it','at','we','can','has','have','what','which','when','where','why','how']);
+  const concepts = [];
+  
+  for (const sentence of sentences) {
+    const words = sentence.toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').split(/\s+/).filter(w => w.length > 3 && !stopwords.has(w));
+    concepts.push(...words);
+  }
+
+  // Get unique key terms
+  const freq = {};
+  for (const c of concepts) {
+    freq[c] = (freq[c] || 0) + 1;
+  }
+  
+  const keyTerms = Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, Math.min(15, Object.keys(freq).length));
+
+  // Generate questions from sentences
+  const questions = [];
+  const usedSentences = new Set();
+
+  for (let i = 0; i < Math.min(questionsCount, sentences.length); i++) {
+    const sentenceIndex = Math.floor((i / questionsCount) * sentences.length);
+    if (usedSentences.has(sentenceIndex)) continue;
+    usedSentences.add(sentenceIndex);
+
+    const sentence = sentences[sentenceIndex];
+    const words = sentence.split(/\s+/).filter(w => w.length > 3);
+    
+    // Create question from sentence
+    if (words.length > 5) {
+      const keyWord = words[Math.floor(Math.random() * words.length)];
+      const topic = keyTerms[i % keyTerms.length] || 'General';
+      
+      questions.push({
+        question: sentence.length > 120 ? sentence.slice(0, 117) + '...' : sentence,
+        options: [
+          words[0] || 'Option A',
+          words[Math.min(2, words.length - 1)] || 'Option B',
+          keyTerms[(i + 1) % keyTerms.length] || 'Option C',
+          keyTerms[(i + 2) % keyTerms.length] || 'Option D'
+        ],
+        correctIndex: Math.floor(Math.random() * 4),
+        topic: topic
+      });
+    }
+  }
+
+  // Ensure we have at least some questions
+  if (questions.length === 0) {
+    return { questions: [] };
+  }
+
+  return { questions: questions.slice(0, questionsCount) };
+}
+
+/**
  * POST /api/generate-notes
  * Generate summary or quiz from notes using Google Gemini API
  * Body: { type: "summary" | "quiz", notes: "...", file?: base64, fileMimeType?: string }
  */
 app.post('/api/generate-notes', async (req, res) => {
   try {
-    const { type, notes, file, fileMimeType } = req.body;
+    let { type, notes, file, fileMimeType } = req.body;
+
+    // Debug: log received file metadata
+    try {
+      console.log('Received generate request:', { type, hasFile: !!file, fileMimeType: fileMimeType || null, fileBase64Length: file ? file.length : 0, pdfParseAvailable: !!pdfParse });
+    } catch (e) {
+      // ignore logging errors
+    }
+
+    // If a PDF file was uploaded (base64), try to extract text server-side
+    let effectiveNotes = notes || '';
+    if (file && fileMimeType && fileMimeType.toLowerCase().includes('pdf')) {
+      if (pdfParse) {
+        try {
+          const pdfBuffer = Buffer.from(file, 'base64');
+          // Support both function-based imports and class-based imports (e.g. mehmet-kozan/pdf-parse class PDFParse)
+          let parsed;
+          if (typeof pdfParse === 'function') {
+            parsed = await pdfParse(pdfBuffer);
+          } else if (pdfParse && typeof pdfParse.PDFParse === 'function') {
+            const parserInstance = new pdfParse.PDFParse({ data: pdfBuffer });
+            parsed = await parserInstance.getText();
+          } else if (pdfParse && typeof pdfParse.default === 'function') {
+            parsed = await pdfParse.default(pdfBuffer);
+          } else {
+            throw new Error('pdf-parse export not callable or instantiable');
+          }
+          const extracted = (parsed && parsed.text) ? parsed.text.trim() : '';
+          if (extracted) {
+            effectiveNotes = (effectiveNotes ? effectiveNotes + '\n\n' : '') + extracted;
+            console.log('✅ Extracted text from uploaded PDF, length:', extracted.length);
+          } else {
+            console.warn('PDF parsed but no text extracted');
+          }
+        } catch (err) {
+          console.warn('Failed to parse uploaded PDF:', err && err.message ? err.message : err);
+        }
+      } else {
+        console.warn('pdf-parse not installed — PDF uploads will be sent raw');
+      }
+    }
     
     if (!type || !['summary', 'quiz'].includes(type)) {
       return res.status(400).json({ error: 'Invalid type. Use "summary" or "quiz"' });
@@ -379,10 +557,18 @@ app.post('/api/generate-notes', async (req, res) => {
 
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     
-    // If no API key or placeholder, return mock data for development
+    // If no API key or placeholder, try local summarizer first
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') {
-      console.log('⚠️ No valid GEMINI_API_KEY set, returning mock data');
+      console.log('⚠️ No valid GEMINI_API_KEY set, using local summarizer');
       console.log('ℹ️ To enable AI: Add your key to server/.env file');
+      if (effectiveNotes && effectiveNotes.trim().length > 0) {
+        if (type === 'summary') {
+          return res.json(summarizeText(effectiveNotes, 8));
+        } else {
+          // For quiz, generate simple questions from the text
+          return res.json(generateQuizFromText(effectiveNotes));
+        }
+      }
       return res.json(getFallbackAIResponse(type));
     }
 
@@ -408,7 +594,7 @@ Rules:
 
 Here are the student's notes to analyze:
 
-${notes}
+${effectiveNotes}
 
 Return ONLY the JSON object, no other text.`;
     } else {
@@ -435,7 +621,7 @@ Return your response as valid JSON with this exact structure:
 
 Here are the student's notes to analyze:
 
-${notes}
+${effectiveNotes}
 
 Generate exactly 10 questions based ONLY on the content above. Return ONLY the JSON object, no other text.`;
     }
@@ -486,6 +672,13 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
       if (!response.ok) {
         console.warn(`Gemini returned ${response.status}; falling back to local content`);
         console.log('Gemini provider Response:', JSON.stringify(data, null, 2));
+        if (type === 'summary' && effectiveNotes && effectiveNotes.trim().length > 0) {
+          console.log('Using local summarizer due to Gemini non-2xx response');
+          return res.status(200).json(summarizeText(effectiveNotes, 8));
+        } else if (type === 'quiz' && effectiveNotes && effectiveNotes.trim().length > 0) {
+          console.log('Using local quiz generator due to Gemini non-2xx response');
+          return res.status(200).json(generateQuizFromText(effectiveNotes));
+        }
         return res.status(200).json(getFallbackAIResponse(type));
       }
     } catch (err) {
@@ -500,6 +693,13 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
         data = await response.json();
       } else {
         console.warn('Gemini unavailable, returning fallback response instead:', err.message);
+        if (type === 'summary' && effectiveNotes && effectiveNotes.trim().length > 0) {
+          console.log('Using local summarizer due to Gemini fetch error');
+          return res.status(200).json(summarizeText(effectiveNotes, 8));
+        } else if (type === 'quiz' && effectiveNotes && effectiveNotes.trim().length > 0) {
+          console.log('Using local quiz generator due to Gemini fetch error');
+          return res.status(200).json(generateQuizFromText(effectiveNotes));
+        }
         return res.status(200).json(getFallbackAIResponse(type));
       }
     }
@@ -507,8 +707,41 @@ Generate exactly 10 questions based ONLY on the content above. Return ONLY the J
     console.log('Gemini provider Status:', response.status);
     console.log('Gemini provider Response:', JSON.stringify(data, null, 2));
 
-    // Return the raw provider response for debugging (temporary)
-    return res.status(response.status >= 200 && response.status < 300 ? 200 : response.status).json(data);
+    // If provider returned non-2xx, fall back to local summarizer when possible
+    if (!(response.status >= 200 && response.status < 300)) {
+      if (type === 'summary' && effectiveNotes && effectiveNotes.trim().length > 0) {
+        console.log('Using local summarizer due to Gemini non-2xx final response');
+        return res.status(200).json(summarizeText(effectiveNotes, 8));
+      } else if (type === 'quiz' && effectiveNotes && effectiveNotes.trim().length > 0) {
+        console.log('Using local quiz generator due to Gemini non-2xx final response');
+        return res.status(200).json(generateQuizFromText(effectiveNotes));
+      }
+      return res.status(200).json(getFallbackAIResponse(type));
+    }
+
+    // Extract the actual content from Gemini's response structure
+    try {
+      if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+        const textContent = data.candidates[0].content.parts[0].text;
+        if (textContent) {
+          const parsedContent = JSON.parse(textContent);
+          console.log(`✅ Successfully extracted and parsed ${type} from Gemini response`);
+          return res.status(200).json(parsedContent);
+        }
+      }
+      console.warn('Failed to extract content from Gemini response structure');
+      return res.status(200).json(getFallbackAIResponse(type));
+    } catch (parseErr) {
+      console.warn('Failed to parse Gemini response:', parseErr.message);
+      if (type === 'summary' && effectiveNotes && effectiveNotes.trim().length > 0) {
+        console.log('Using local summarizer due to parse error');
+        return res.status(200).json(summarizeText(effectiveNotes, 8));
+      } else if (type === 'quiz' && effectiveNotes && effectiveNotes.trim().length > 0) {
+        console.log('Using local quiz generator due to parse error');
+        return res.status(200).json(generateQuizFromText(effectiveNotes));
+      }
+      return res.status(200).json(getFallbackAIResponse(type));
+    }
     
   } catch (error) {
     console.error('Error generating notes:', error);
