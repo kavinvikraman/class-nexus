@@ -190,37 +190,48 @@ const ClassroomDashboard = () => {
                 </div>
               </div>
 
-              {!isTeacher && (
-                <div className="flex gap-4 justify-center flex-wrap">
-                  <Button
-                    onClick={() => navigate("/notes")}
-                    variant="outline"
-                    size="lg"
-                    className="gap-2 font-display rounded-xl hover:scale-105 transition-all duration-300"
-                  >
-                    <FileText className="h-4 w-4" />
-                    Add Notes
-                  </Button>
-                  <Button
-                    onClick={handleStartQuiz}
-                    disabled={quizLoading}
-                    size="lg"
-                    className="gap-2 font-display font-semibold rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/25 hover:scale-105 transition-all duration-300"
-                  >
-                    {quizLoading ? (
-                      <>
-                        <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" />
-                        Start Quiz
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
+              <div className="flex gap-4 justify-center flex-wrap">
+                <Button
+                  onClick={() => navigate("/ai-assistant")}
+                  variant="outline"
+                  size="lg"
+                  className="gap-2 font-display rounded-xl border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 hover:scale-105 transition-all duration-300"
+                >
+                  <Brain className="h-4 w-4 text-purple-500" />
+                  AI Assistant (RAG)
+                </Button>
+                {!isTeacher && (
+                  <>
+                    <Button
+                      onClick={() => navigate("/notes")}
+                      variant="outline"
+                      size="lg"
+                      className="gap-2 font-display rounded-xl hover:scale-105 transition-all duration-300"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Add Notes
+                    </Button>
+                    <Button
+                      onClick={handleStartQuiz}
+                      disabled={quizLoading}
+                      size="lg"
+                      className="gap-2 font-display font-semibold rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/25 hover:scale-105 transition-all duration-300"
+                    >
+                      {quizLoading ? (
+                        <>
+                          <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4" />
+                          Start Quiz
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </motion.div>
 

@@ -44,6 +44,9 @@ try {
 
 // Import auth routes
 const authRoutes = require('./routes/auth');
+// Import RAG routes and service
+const ragRoutes = require('./routes/rag');
+const ragService = require('./services/ragService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -68,6 +71,8 @@ app.use(express.json({ limit: '50mb' }));
 
 // Authentication routes
 app.use('/api/auth', authRoutes);
+// RAG Academic Assistant routes
+app.use('/api/rag', ragRoutes);
 
 // Serve static files from the React app build
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -760,6 +765,9 @@ app.get('*', (req, res) => {
 // ============================================
 // START SERVER
 // ============================================
+
+// Connect to MongoDB (with local JSON fallback)
+ragService.connectDB();
 
 app.listen(PORT, () => {
   console.log(`

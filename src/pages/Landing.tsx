@@ -1,13 +1,76 @@
-import { motion } from "framer-motion";
-import { BookOpen, Brain, Zap, Sparkles, ArrowRight, Users, LogIn } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { BookOpen, Brain, Zap, Sparkles, ArrowRight, Users, LogIn, MessageSquare, Send, X, FileText, Loader2 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { isAuthenticated, getUser } from "@/services/authApi";
+
+// API base URL - relative in production, localhost in development
+const API_BASE = import.meta.env.DEV 
+  ? "http://localhost:3001" 
+  : "";
 
 const Landing = () => {
   const navigate = useNavigate();
   const authenticated = isAuthenticated();
   const user = getUser();
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; sources?: string[] }>>([
+    { role: 'assistant', content: "Hi! I am the ClassNexus AI Assistant. Ask me anything based on the uploaded notes, syllabus, question banks, or regulations!" }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sessionId] = useState(() => 'session_landing_' + Math.random().toString(36).substring(2, 9));
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/rag/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          question: userMessage
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.content) {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.content, 
+          sources: data.sources 
+        }]);
+      } else {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: "Sorry, I encountered an error. Please make sure the backend server is running." 
+        }]);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "Network error. Please make sure the backend server is running." 
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -82,6 +145,14 @@ const Landing = () => {
               <span className="text-sm text-muted-foreground hidden sm:block">
                 Hi, {user?.name?.split(' ')[0]}
               </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => navigate("/ai-assistant")}
+              >
+                AI Assistant (RAG)
+              </Button>
               <Button
                 variant="default"
                 size="sm"
@@ -166,6 +237,15 @@ const Landing = () => {
             <Button
               size="lg"
               variant="outline"
+              className="text-lg px-10 py-7 rounded-2xl font-display font-semibold hover:scale-105 transition-all duration-300 group border-primary/40 hover:border-primary/60 hover:bg-primary/5 shadow-md shadow-primary/5"
+              onClick={() => navigate(authenticated ? "/ai-assistant" : "/signup")}
+            >
+              <Sparkles className="mr-2 h-5 w-5 text-primary animate-pulse" />
+              AI Assistant (RAG)
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
               className="text-lg px-10 py-7 rounded-2xl font-display font-semibold hover:scale-105 transition-all duration-300 group border-purple-500/30 hover:border-purple-500/50 hover:bg-purple-500/10"
               onClick={() => navigate(authenticated ? "/classroom" : "/login")}
             >
@@ -198,6 +278,103 @@ const Landing = () => {
           </motion.div>
         </motion.div>
       </main>
+
+      {/* Floating Chatbot Widget */}
+      <div className="fixed bottom-6 right-6 z-50">
+        {/* Toggle Button */}
+        <motion.button
+          onClick={() => setChatOpen(!chatOpen)}
+          className="h-14 w-14 rounded-full bg-gradient-to-r from-primary to-purple-600 shadow-xl flex items-center justify-center cursor-pointer text-primary-foreground hover:scale-110 active:scale-95 transition-transform duration-200"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          {chatOpen ? <X className="h-6 w-6 text-white" /> : <MessageSquare className="h-6 w-6 text-white" />}
+        </motion.button>
+
+        {/* Chat Window */}
+        <AnimatePresence>
+          {chatOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.9 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="absolute bottom-16 right-0 w-[320px] sm:w-[380px] h-[480px] bg-background/95 border border-border/80 rounded-2xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-md"
+            >
+              {/* Header */}
+              <div className="p-4 bg-gradient-to-r from-primary/10 to-purple-500/10 border-b border-border/60 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shrink-0">
+                  <Brain className="h-5 w-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-xs font-semibold text-foreground">ClassNexus AI Assistant</h4>
+                  <p className="text-[9px] text-muted-foreground">Retrieval-Augmented Generation (RAG)</p>
+                </div>
+              </div>
+
+              {/* Message List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin text-left">
+                {messages.map((msg, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div 
+                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${
+                        msg.role === 'user' 
+                          ? 'bg-primary text-primary-foreground text-left' 
+                          : 'bg-muted border border-border/50 text-foreground text-left'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5 px-1">
+                        {msg.sources.map((src, sIdx) => (
+                          <div 
+                            key={sIdx} 
+                            className="inline-flex items-center gap-1 text-[8px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full font-medium"
+                          >
+                            <FileText className="h-2.5 w-2.5" />
+                            {src}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {loading && (
+                  <div className="flex items-center gap-2 text-muted-foreground text-[10px] p-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Thinking...</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleSendMessage} className="p-3 border-t border-border/60 flex items-center gap-2 bg-muted/20">
+                <input 
+                  type="text" 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask a question..."
+                  className="flex-1 bg-background/50 border border-border/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                  disabled={loading}
+                />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
+                  disabled={loading || !input.trim()}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </Button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };

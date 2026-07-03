@@ -16,6 +16,7 @@ import ClassroomQuizPage from "./pages/ClassroomQuizPage";
 import ClassroomResultsPage from "./pages/ClassroomResultsPage";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AIAssistant from "./pages/AIAssistant";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <ResultsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-assistant"
+            element={
+              <ProtectedRoute>
+                <AIAssistant />
               </ProtectedRoute>
             }
           />
