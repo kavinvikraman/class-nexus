@@ -46,6 +46,7 @@ try {
 const authRoutes = require('./routes/auth');
 // Import RAG routes and service
 const ragRoutes = require('./routes/rag');
+const mentorRoutes = require('./routes/mentor');
 const ragService = require('./services/ragService');
 
 const app = express();
@@ -73,6 +74,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/api/auth', authRoutes);
 // RAG Academic Assistant routes
 app.use('/api/rag', ragRoutes);
+app.use('/api/mentor', mentorRoutes);
 
 // Serve static files from the React app build
 app.use(express.static(path.join(__dirname, '../dist')));

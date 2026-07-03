@@ -17,6 +17,7 @@ import ClassroomResultsPage from "./pages/ClassroomResultsPage";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AIAssistant from "./pages/AIAssistant";
+import AIMentor from "./pages/AIMentor";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <AIAssistant />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-mentor"
+            element={
+              <ProtectedRoute>
+                <AIMentor />
               </ProtectedRoute>
             }
           />

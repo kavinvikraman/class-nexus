@@ -252,6 +252,15 @@ const Landing = () => {
               <Users className="mr-2 h-5 w-5 text-purple-500" />
               Classroom Mode
             </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg px-10 py-7 rounded-2xl font-display font-semibold hover:scale-105 transition-all duration-300 group border-amber-500/30 hover:border-amber-500/60 hover:bg-amber-500/10 shadow-md shadow-amber-500/5 bg-gradient-to-r from-amber-500/5 to-primary/5"
+              onClick={() => navigate("/ai-mentor")}
+            >
+              <Sparkles className="mr-2 h-5 w-5 text-amber-500 animate-pulse" />
+              🎓 AI Mentor
+            </Button>
           </motion.div>
 
           {/* Features */}

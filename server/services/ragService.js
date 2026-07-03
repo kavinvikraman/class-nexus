@@ -280,6 +280,22 @@ async function searchChunks(queryEmbedding, queryText, category = null, limit = 
 }
 
 /**
+ * Retrieves every stored chunk for corpus-wide operations
+ */
+async function getAllChunks() {
+  if (isConnected()) {
+    return await DocumentChunkModel.find().sort({ documentName: 1, chunkIndex: 1 });
+  }
+
+  return readJsonFile(CHUNKS_FILE).sort((a, b) => {
+    if (a.documentName === b.documentName) {
+      return (a.chunkIndex || 0) - (b.chunkIndex || 0);
+    }
+    return String(a.documentName || '').localeCompare(String(b.documentName || ''));
+  });
+}
+
+/**
  * Retrieves all chat sessions
  */
 async function getChatSessions() {
@@ -378,6 +394,7 @@ module.exports = {
   isConnected,
   saveDocument,
   getDocuments,
+  getAllChunks,
   deleteDocument,
   searchChunks,
   getChatSessions,
